@@ -1,9 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using FemBoy_Account_Manager.Models;
+using Seans_Account_Manager.Models;
 
-namespace FemBoy_Account_Manager.Services;
+namespace Seans_Account_Manager.Services;
 
 public class AutoRejoinService
 {

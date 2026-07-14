@@ -3,9 +3,9 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using FemBoy_Account_Manager.Models;
+using Seans_Account_Manager.Models;
 
-namespace FemBoy_Account_Manager.Services;
+namespace Seans_Account_Manager.Services;
 
 public class RobloxAuthResult
 {
@@ -17,12 +17,14 @@ public class RobloxAuthResult
 
 public class RobloxApiService
 {
+    private static long _launchSequence;
+
     private static HttpClient CreateClient(string cookie)
     {
         var handler = new HttpClientHandler { UseCookies = false };
         var client = new HttpClient(handler);
         client.DefaultRequestHeaders.Add("Cookie", $".ROBLOSECURITY={cookie}");
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 FemBoyAccountManager");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 SeansAccountManager");
         return client;
     }
 
@@ -177,7 +179,8 @@ public class RobloxApiService
                          "+browsertrackerid:0+robloxLocale:en_us+gameLocale:en_us+channel:";
         }
 
-        string uri = "roblox-player:1" + joinScript;
+        long sequence = Interlocked.Increment(ref _launchSequence);
+        string uri = "roblox-player:1" + joinScript + $"+launchIdentifier:{sequence}";
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = uri,

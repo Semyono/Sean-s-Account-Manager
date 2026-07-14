@@ -1,4 +1,4 @@
-<Window x:Class="FemBoy_Account_Manager.Windows.NoteDialog"
+<Window x:Class="Seans_Account_Manager.Windows.NoteDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Edit Note" Height="180" Width="380"

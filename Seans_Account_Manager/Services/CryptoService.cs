@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace FemBoy_Account_Manager.Services;
+namespace Seans_Account_Manager.Services;
 
 public static class CryptoService
 {

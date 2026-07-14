@@ -1,4 +1,4 @@
-namespace FemBoy_Account_Manager.Models;
+namespace Seans_Account_Manager.Models;
 
 public class Account
 {

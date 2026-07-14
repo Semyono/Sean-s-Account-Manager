@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 
-namespace FemBoy_Account_Manager.Windows;
+namespace Seans_Account_Manager.Windows;
 
 public partial class LoginWindow : Window
 {

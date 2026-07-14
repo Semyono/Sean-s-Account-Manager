@@ -3,7 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <RootNamespace>Femboy_Account_Manager</RootNamespace>
+    <RootNamespace>Seans_Account_Manager</RootNamespace>
+    <AssemblyName>Seans_Account_Manager</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -11,7 +12,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
-    <PackageReference Include="System.Threading.AccessControl" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

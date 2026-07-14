@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text.Json;
-using FemBoy_Account_Manager.Models;
+using Seans_Account_Manager.Models;
 
-namespace FemBoy_Account_Manager.Services;
+namespace Seans_Account_Manager.Services;
 
 public class AccountStore
 {
@@ -14,7 +14,7 @@ public class AccountStore
     {
         _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "FemBoy_Account_Manager");
+            "Seans_Account_Manager");
         _dataFile = Path.Combine(_dataDir, "accounts.json");
         Directory.CreateDirectory(_dataDir);
         Load();

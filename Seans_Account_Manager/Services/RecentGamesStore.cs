@@ -1,8 +1,8 @@
 ﻿using System.IO;
 using System.Text.Json;
-using FemBoy_Account_Manager.Models;
+using Seans_Account_Manager.Models;
 
-namespace FemBoy_Account_Manager.Services;
+namespace Seans_Account_Manager.Services;
 
 public class RecentGamesStore
 {
@@ -15,7 +15,7 @@ public class RecentGamesStore
     {
         var dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "FemBoyAccountManager");
+            "SeansAccountManager");
         Directory.CreateDirectory(dataDir);
         _dataFile = Path.Combine(dataDir, "recent_games.json");
         Load();

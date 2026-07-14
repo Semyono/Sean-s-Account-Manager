@@ -1,7 +1,7 @@
 using System.Windows;
-using FemBoy_Account_Manager.Services;
+using Seans_Account_Manager.Services;
 
-namespace FemBoy_Account_Manager;
+namespace Seans_Account_Manager;
 
 public partial class App : Application
 {
@@ -13,7 +13,6 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // Clean up zombie Roblox processes on shutdown
         RobloxProcessService.KillAll();
         MultiRobloxService.Disable();
         base.OnExit(e);

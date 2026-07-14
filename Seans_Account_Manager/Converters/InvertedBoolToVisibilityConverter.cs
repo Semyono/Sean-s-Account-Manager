@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Data;
 
-namespace FemBoy_Account_Manager.Converters;
+namespace Seans_Account_Manager.Converters;
 
 public class InvertedBoolToVisibilityConverter : IValueConverter
 {

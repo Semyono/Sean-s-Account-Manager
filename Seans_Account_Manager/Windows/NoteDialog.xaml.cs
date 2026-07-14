@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace FemBoy_Account_Manager.Windows;
+namespace Seans_Account_Manager.Windows;
 
 public partial class NoteDialog : Window
 {
