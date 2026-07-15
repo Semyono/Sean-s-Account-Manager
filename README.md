@@ -14,7 +14,7 @@ Join by Place ID, Job ID, or a private server link (VIP link, share link, or a r
 
 Multi Roblox
 
-Run more than one Roblox window at the same time using Sysinternals Handle64. You can download or delete Handle64 from inside the app with a progress bar. If the app isn't running as admin it will warn you, since Handle64 needs elevated permissions.
+Run more than one Roblox window at the same time using Sysinternals Handle64.
 
 Anti AFK
 
@@ -26,7 +26,7 @@ Watches an account's window and relaunches it automatically if it closes or cras
 
 Roblox Tweaks
 
-Force a framerate cap and lock it so Roblox can't change it back. There's also a hard RAM cap per Roblox process, enforced by Windows.
+Force a framerate cap and lock it. There's also a hard RAM cap per Roblox process, enforced by Windows.
 
 Console
 
@@ -34,13 +34,12 @@ A live log with filters so you can see what the app is doing at any time.
 
 Installation
 
-Download the latest release from the Releases page and extract the zip. Run the exe.
+Download the latest release from the Releases page and Run the exe.
 
 Windows might warn you that the file isn't signed. Click More info then Run anyway. This is normal for small open source tools that don't have a paid certificate.
 
 The app also asks for admin permissions on launch. That's only needed for Multi Roblox, nothing else uses it.
 
-You don't need to install .NET separately, everything is bundled into the exe.
 
 Building from source
 
