@@ -1,6 +1,6 @@
 Sean's Account Manager
 
-A personal Roblox account manager built in C# and WPF. Manage multiple accounts, launch games through any launcher, and tweak performance settings. Everything runs locally, no cloud, no telemetry.
+A personal Roblox account manager built in C# and WPF. Manage multiple accounts.
 
 Features
 
