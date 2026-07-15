@@ -47,12 +47,10 @@ public class RecentGamesStore
 
     public void AddOrPromote(RecentGame game)
     {
-        // Remove any existing entry with same PlaceId, then push to front
         Games.RemoveAll(g => g.PlaceId == game.PlaceId);
         game.LastPlayed = DateTime.Now;
         Games.Insert(0, game);
 
-        // Cap at MaxRecent
         if (Games.Count > MaxRecent)
             Games = Games.Take(MaxRecent).ToList();
 

@@ -72,7 +72,7 @@ public static class WindowRenameService
                         result.Add(hWnd);
                 }
             }
-            catch { /* process might have exited between enumeration and lookup */ }
+            catch { }
 
             return true;
         }, IntPtr.Zero);

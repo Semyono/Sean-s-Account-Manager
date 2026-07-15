@@ -26,7 +26,6 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- TITLE BAR -->
         <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Background="{StaticResource BgSidebar}"
                 BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
@@ -47,7 +46,6 @@
             </Grid>
         </Border>
 
-        <!-- SIDEBAR -->
         <Border Grid.Row="1" Grid.Column="0" Background="{StaticResource BgSidebar}"
                 BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,1,0">
             <DockPanel LastChildFill="False">
@@ -66,23 +64,29 @@
                     <RadioButton x:Name="NavConsole"     Content="Console"      Style="{StaticResource NavButton}" GroupName="Nav" Checked="Nav_Checked" Tag="Console"/>
                 </StackPanel>
 
-                <TextBlock DockPanel.Dock="Bottom" Text="v1.0"
-                           Foreground="{StaticResource TextMuted}"
-                           FontSize="10" Margin="12,0,0,12"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="12,0,12,12">
+                    <TextBlock Text="↓ come say hi? no pressure ♥" Foreground="{StaticResource TextMuted}"
+               FontSize="10" FontStyle="Italic" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="v1.0" Foreground="{StaticResource TextMuted}"
+                   FontSize="10" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Image Source="/Assets/discord_icon.png" Width="16" Height="16" Cursor="Hand"
+               MouseLeftButtonUp="DiscordLink_Click" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <Image Source="/Assets/roblox_icon.png" Width="16" Height="16" Cursor="Hand"
+               MouseLeftButtonUp="RobloxProfileLink_Click" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- TAB CONTENT -->
         <Grid Grid.Row="1" Grid.Column="1">
 
-            <!-- ===== ACCOUNTS TAB ===== -->
             <Grid x:Name="AccountsTab" Visibility="Visible" Opacity="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="260"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Account list -->
                 <Grid Grid.Column="0" Margin="14,12,0,12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -102,8 +106,12 @@
                             <TextBlock x:Name="AccountCountLabel" Text="0 accounts"
                                        Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,2,0,0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Refresh" Style="{StaticResource GhostButton}"
-                                Click="RefreshAll_Click" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="SelectAllButton" Content="Select All" Style="{StaticResource GhostButton}"
+                                    Click="SelectAllButton_Click" Margin="0,0,6,0"/>
+                            <Button Content="Refresh" Style="{StaticResource GhostButton}"
+                                    Click="RefreshAll_Click"/>
+                        </StackPanel>
                     </Grid>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -193,11 +201,14 @@
                         </ItemsControl>
                     </ScrollViewer>
 
-                    <Button Grid.Row="2" Content="+ Add Account" Style="{StaticResource PrimaryButton}"
-                            Click="AddAccount_Click" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="+ Add Account" Style="{StaticResource PrimaryButton}"
+            Click="AddAccount_Click" Margin="0,0,6,0"/>
+                        <Button Content="Import Cookie" Style="{StaticResource GhostButton}"
+            Click="ImportCookie_Click"/>
+                    </StackPanel>
                 </Grid>
 
-                <!-- Right panel -->
                 <Border Grid.Column="1" Background="{StaticResource BgPanel}"
                         BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1,0,0,0">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -215,10 +226,25 @@
 
                             <TextBlock Text="Job ID (optional)" Foreground="{StaticResource TextSecondary}"
                                        FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="JobIdBox" Margin="0,0,0,10"/>
+                            <TextBox x:Name="JobIdBox" Margin="0,0,0,10" LostFocus="JobIdBox_LostFocus"/>
 
-                            <Button Content="Join / Launch Selected" Style="{StaticResource PrimaryButton}"
-                                    Click="JoinPlace_Click" HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="Private Server Link (optional)" Foreground="{StaticResource TextSecondary}"
+                                    FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="PrivateServerLinkBox" Margin="0,0,0,3" LostFocus="PrivateServerLinkBox_LostFocus"/>
+                            <TextBlock x:Name="PrivateServerStatusLabel" Text=""
+                                    Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,0,10"
+                                    TextWrapping="Wrap"/>
+                            <Grid Margin="0,0,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="6"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="Launch Selected" Style="{StaticResource PrimaryButton}"
+                                     Click="JoinPlace_Click"/>
+                                <Button Grid.Column="2" Content="Smallest Server" Style="{StaticResource GhostButton}"
+                                     Click="JoinSmallestServer_Click"/>
+                            </Grid>
 
                             <Rectangle Height="1" Fill="{StaticResource BorderSubtle}" Margin="0,12,0,10"/>
 
@@ -272,7 +298,6 @@
                 </Border>
             </Grid>
 
-            <!-- ===== MULTI ROBLOX TAB ===== -->
             <Grid x:Name="MultiRobloxTab" Visibility="Collapsed" Margin="18,14,18,14">
                 <StackPanel>
                     <TextBlock Text="Multi Roblox" Foreground="{StaticResource TextPrimary}"
@@ -293,16 +318,38 @@
                                        Foreground="{StaticResource TextSecondary}" FontSize="12"
                                        TextWrapping="Wrap" Margin="0,6,0,0"/>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button x:Name="DownloadHandle64Button"
-                                        Content="Download Handle64"
-                                        Style="{StaticResource GhostButton}"
-                                        Click="DownloadHandle64_Click"/>
-                                <TextBlock x:Name="Handle64StatusLabel"
-                                           Text="[Handle64 not found]"
-                                           Foreground="{StaticResource TextMuted}"
-                                           VerticalAlignment="Center"
-                                           Margin="8,0,0,0"/>
+                            <StackPanel Margin="0,8,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="DownloadHandle64Button"
+                Content="Download Handle64"
+                Style="{StaticResource GhostButton}"
+                Click="DownloadHandle64_Click"/>
+                                    <Button x:Name="DeleteHandle64Button"
+                Content="Delete Handle64"
+                Style="{StaticResource DangerButton}"
+                Click="DeleteHandle64_Click"
+                Margin="6,0,0,0"
+                Visibility="Collapsed"/>
+                                    <TextBlock x:Name="Handle64StatusLabel"
+                   Text="[Handle64 not found]"
+                   Foreground="{StaticResource TextMuted}"
+                   VerticalAlignment="Center"
+                   Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <Grid x:Name="Handle64ProgressPanel" Margin="0,6,0,0" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ProgressBar x:Name="Handle64ProgressBar" Grid.Column="0" Height="6"
+                     Minimum="0" Maximum="100" Value="0"
+                     Foreground="{StaticResource AccentBrush}"
+                     Background="{StaticResource BgCard}"
+                     BorderThickness="0"/>
+                                    <TextBlock x:Name="Handle64ProgressLabel" Grid.Column="1" Text="0%"
+                   Foreground="{StaticResource TextMuted}" FontSize="10"
+                   Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </Grid>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -341,7 +388,6 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ===== ANTI AFK TAB ===== -->
             <Grid x:Name="AntiAfkTab" Visibility="Collapsed" Margin="18,14,18,14">
                 <StackPanel>
                     <TextBlock Text="Anti AFK" Foreground="{StaticResource TextPrimary}"
@@ -407,75 +453,175 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ===== SETTINGS TAB ===== -->
             <Grid x:Name="SettingsTab" Visibility="Collapsed" Margin="18,14,18,14">
-                <StackPanel>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
                     <TextBlock Text="Settings" Foreground="{StaticResource TextPrimary}"
-                               FontSize="14" FontWeight="SemiBold" Margin="0,0,0,12"/>
-
-                    <Border Background="{StaticResource BgCard}"
-                            BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                            Padding="12,10" Margin="0,0,0,6">
-                        <StackPanel>
-                            <TextBlock Text="General" Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
-
-                            <CheckBox x:Name="AlwaysOnTopCheckBox"
-                                      Content="Always On Top"
-                                      Foreground="{StaticResource TextSecondary}"
-                                      Margin="0,0,0,6"
-                                      Checked="GeneralSettingCheckBox_Changed"
-                                      Unchecked="GeneralSettingCheckBox_Changed"/>
-
-                            <CheckBox x:Name="ConfirmBeforeLaunchCheckBox"
-                                      Content="Confirm Before Launch"
-                                      Foreground="{StaticResource TextSecondary}"
-                                      Checked="GeneralSettingCheckBox_Changed"
-                                      Unchecked="GeneralSettingCheckBox_Changed"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Background="{StaticResource BgCard}"
-                            BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                            Padding="12,10" Margin="0,0,0,6">
-                        <StackPanel>
-                            <TextBlock Text="Encryption" Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                            <TextBlock Text="Account cookies are encrypted with Windows DPAPI, tied to your Windows user. No passwords needed."
-                                       Foreground="{StaticResource TextSecondary}"
-                                       FontSize="12" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Background="{StaticResource BgCard}"
-                            BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                            Padding="12,10" Margin="0,0,0,6">
-                        <StackPanel>
-                            <TextBlock Text="Data Location" Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                            <TextBlock Text="%AppData%\SeansAccountManager   "
-                                       Foreground="{StaticResource TextSecondary}"
-                                       FontSize="12" FontFamily="Consolas" Margin="0,0,0,8"/>
-                            <Button Content="Open Data Folder" Style="{StaticResource GhostButton}"
-                                    Click="OpenDataFolder_Click" HorizontalAlignment="Left"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Background="{StaticResource BgCard}"
-                            BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                            Padding="12,10">
-                        <StackPanel>
-                            <TextBlock Text="About" Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                            <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="12" TextWrapping="Wrap">
-                                Sean's Account Manager · v1.0<LineBreak/>
-                            </TextBlock>
-                        </StackPanel>
-                    </Border>
+                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <RadioButton x:Name="SettingsNavGeneral" Content="General"
+                     Style="{StaticResource NavButton}" IsChecked="True"
+                     GroupName="SettingsNav" Checked="SettingsSubNav_Checked" Tag="General"/>
+                    <RadioButton x:Name="SettingsNavLauncher" Content="Roblox Launcher"
+                     Style="{StaticResource NavButton}"
+                     GroupName="SettingsNav" Checked="SettingsSubNav_Checked" Tag="RobloxLauncher"/>
                 </StackPanel>
+
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <StackPanel x:Name="SettingsGeneralPanel" Visibility="Visible">
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="General" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                                    <CheckBox x:Name="AlwaysOnTopCheckBox"
+                                  Content="Always On Top"
+                                  Foreground="{StaticResource TextSecondary}"
+                                  Margin="0,0,0,6"
+                                  Checked="GeneralSettingCheckBox_Changed"
+                                  Unchecked="GeneralSettingCheckBox_Changed"/>
+
+                                    <CheckBox x:Name="ConfirmBeforeLaunchCheckBox"
+                                  Content="Confirm Before Launch"
+                                  Foreground="{StaticResource TextSecondary}"
+                                  Checked="GeneralSettingCheckBox_Changed"
+                                  Unchecked="GeneralSettingCheckBox_Changed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="Encryption" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Account cookies are encrypted with Windows DPAPI, tied to your Windows user. No passwords needed."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="Data Location" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="%AppData%\SeansAccountManager   "
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="12" FontFamily="Consolas" Margin="0,0,0,8"/>
+                                    <Button Content="Open Data Folder" Style="{StaticResource GhostButton}"
+                                Click="OpenDataFolder_Click" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10">
+                                <StackPanel>
+                                    <TextBlock Text="About" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="12" TextWrapping="Wrap">
+                            Sean's Account Manager · v1.0<LineBreak/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel x:Name="SettingsLauncherPanel" Visibility="Collapsed">
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="Launcher" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Choose which Roblox bootstrapper to launch games through."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                    <StackPanel x:Name="LauncherRadioPanel"/>
+
+                                    <Rectangle Height="1" Fill="{StaticResource BorderSubtle}" Margin="0,10,0,10"/>
+
+                                    <TextBlock Text="Custom Path (optional)" Foreground="{StaticResource TextPrimary}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="If a bootstrapper is installed somewhere non-standard, point directly at its .exe."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="CustomLauncherPathBox" Grid.Column="0" Margin="0,0,6,0"
+                                     LostFocus="CustomLauncherPathBox_LostFocus"/>
+                                        <Button Grid.Column="1" Content="Browse" Style="{StaticResource GhostButton}"
+                                    Click="BrowseCustomLauncherPath_Click"/>
+                                    </Grid>
+                                    <TextBlock x:Name="CustomPathStatusLabel" Text=""
+                                   Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <CheckBox x:Name="ForceFramerateCapCheckBox"
+                                  Content="Force Framerate Cap"
+                                  Foreground="{StaticResource TextPrimary}"
+                                  FontSize="12"
+                                  Checked="ForceFramerateCapCheckBox_Changed"
+                                  Unchecked="ForceFramerateCapCheckBox_Changed"/>
+                                    <TextBlock Text="Overrides Roblox's FPS cap and locks the settings file so it can't reset it."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Cap value:" Foreground="{StaticResource TextSecondary}"
+                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBox x:Name="FramerateCapValueBox" Text="60" Width="80"
+                                     LostFocus="FramerateCapValueBox_LostFocus"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="FramerateStatusLabel" Text=""
+                                   Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{StaticResource BgCard}"
+                        BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                        Padding="12,10">
+                                <StackPanel>
+                                    <CheckBox x:Name="BoostRamCheckBox"
+                                  Content="Boost Roblox RAM Limit"
+                                  Foreground="{StaticResource TextPrimary}"
+                                  FontSize="12"
+                                  Checked="BoostRamCheckBox_Changed"
+                                  Unchecked="BoostRamCheckBox_Changed"/>
+                                    <TextBlock Text="Periodically trims Roblox's memory footprint if it grows past the limit below."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Limit (MB):" Foreground="{StaticResource TextSecondary}"
+                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBox x:Name="RamLimitValueBox" Text="750" Width="80"
+                                     LostFocus="RamLimitValueBox_LostFocus"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="RamBoostStatusLabel" Text=""
+                                   Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
             </Grid>
 
-            <!-- ===== CONSOLE TAB ===== -->
             <Grid x:Name="ConsoleTab" Visibility="Collapsed" Margin="18,14,18,14">
                 <StackPanel>
                     <TextBlock Text="Console" Foreground="{StaticResource TextPrimary}"
@@ -520,7 +666,6 @@
                     </Border>
                 </StackPanel>
             </Grid>
-
         </Grid>
     </Grid>
 </Window>

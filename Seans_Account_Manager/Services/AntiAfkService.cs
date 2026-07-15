@@ -7,12 +7,11 @@ namespace Seans_Account_Manager.Services;
 public class AntiAfkService
 {
     private const int VK_SPACE = 0x20;
-    private const int VK_W    = 0x57;
+    private const int VK_W = 0x57;
     private const int SW_RESTORE = 9;
 
-    // SendInput structures
-    private const uint INPUT_KEYBOARD     = 1;
-    private const uint KEYEVENTF_KEYUP    = 0x0002;
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_SCANCODE = 0x0008;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -74,7 +73,6 @@ public class AntiAfkService
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 
-    // Lets any process call SetForegroundWindow — same trick AutoIt uses internally
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(uint dwProcessId);
     private const uint ASFW_ANY = unchecked((uint)-1);
@@ -86,10 +84,10 @@ public class AntiAfkService
 
     public bool IsRunning => _isRunning;
 
-    public int    IntervalMinutes { get; set; } = 10;
-    public int    PressCount      { get; set; } = 1;
-    public string KeyName         { get; set; } = "W";
-    public ushort VirtualKeyCode  { get; set; } = VK_W;
+    public int IntervalMinutes { get; set; } = 10;
+    public int PressCount { get; set; } = 1;
+    public string KeyName { get; set; } = "W";
+    public ushort VirtualKeyCode { get; set; } = VK_W;
 
     public event Action<int>? Ticked;
     public event Action<int>? CountdownTick;
@@ -171,38 +169,30 @@ public class AntiAfkService
             {
                 if (IsIconic(hwnd)) { ShowWindow(hwnd, SW_RESTORE); Thread.Sleep(300); }
 
-                // At each iteration, whoever is foreground now is our "donor" for the
-                // foreground-stealing permission (on the first loop this is the user's
-                // own window; on subsequent loops it's the previous Roblox window).
-                IntPtr curFg    = GetForegroundWindow();
-                uint   curFgTid = GetWindowThreadProcessId(curFg, out _);
-                uint   targetTid = GetWindowThreadProcessId(hwnd, out _);
+                IntPtr curFg = GetForegroundWindow();
+                uint curFgTid = GetWindowThreadProcessId(curFg, out _);
+                uint targetTid = GetWindowThreadProcessId(hwnd, out _);
 
                 AllowSetForegroundWindow(ASFW_ANY);
 
-                // The AutoIt trick: attach to BOTH the current-foreground thread AND
-                // the target thread. Attaching to the foreground thread "borrows" its
-                // permission to call SetForegroundWindow — without this, Windows silently
-                // ignores the call when we're not the foreground process.
-                AttachThreadInput(myTid, curFgTid,  true);
+                AttachThreadInput(myTid, curFgTid, true);
                 AttachThreadInput(myTid, targetTid, true);
 
                 if (!TryFocusWindow(hwnd))
                 {
                     failed += PressCount;
                     AttachThreadInput(myTid, targetTid, false);
-                    AttachThreadInput(myTid, curFgTid,  false);
+                    AttachThreadInput(myTid, curFgTid, false);
                     continue;
                 }
 
                 focused++;
 
-                // Send while both thread attachments are still live
                 for (int i = 0; i < PressCount; i++)
                 {
                     bool down = SendKeyScan((ushort)vkCode, false, out int errDown);
                     if (!down) down = SendKeyVk((ushort)vkCode, false, out errDown);
-                    Thread.Sleep(250); // hold like a real key tap — Roblox samples input per frame
+                    Thread.Sleep(250);
                     bool up = SendKeyScan((ushort)vkCode, true, out int errUp);
                     if (!up) up = SendKeyVk((ushort)vkCode, true, out errUp);
 
@@ -215,25 +205,24 @@ public class AntiAfkService
                 }
 
                 AttachThreadInput(myTid, targetTid, false);
-                AttachThreadInput(myTid, curFgTid,  false);
+                AttachThreadInput(myTid, curFgTid, false);
             }
             catch { }
         }
 
-        // Restore the window the user was originally looking at
         Thread.Sleep(100);
         try
         {
-            IntPtr curFg    = GetForegroundWindow();   // now the last Roblox window
-            uint   curFgTid = GetWindowThreadProcessId(curFg,      out _);
-            uint   origTid  = GetWindowThreadProcessId(originalFg, out _);
+            IntPtr curFg = GetForegroundWindow();
+            uint curFgTid = GetWindowThreadProcessId(curFg, out _);
+            uint origTid = GetWindowThreadProcessId(originalFg, out _);
 
             AllowSetForegroundWindow(ASFW_ANY);
             AttachThreadInput(myTid, curFgTid, true);
-            AttachThreadInput(myTid, origTid,  true);
+            AttachThreadInput(myTid, origTid, true);
             SetForegroundWindow(originalFg);
             SetFocus(originalFg);
-            AttachThreadInput(myTid, origTid,  false);
+            AttachThreadInput(myTid, origTid, false);
             AttachThreadInput(myTid, curFgTid, false);
         }
         catch { }
@@ -267,14 +256,10 @@ public class AntiAfkService
 
         return GetForegroundWindow() == hwnd;
     }
-
-    // Send with BOTH the VK code and the hardware scan code, exactly like a real
-    // keyboard does. Roblox reads input through Raw Input, which surfaces the SCAN
-    // code — sending wVk with wScan=0 makes the game see "scan code 0" = nothing.
     private static bool SendKeyScan(ushort vkCode, bool keyUp, out int win32Error)
     {
         win32Error = 0;
-        ushort scan = (ushort)MapVirtualKey(vkCode, 0); // MAPVK_VK_TO_VSC
+        ushort scan = (ushort)MapVirtualKey(vkCode, 0); 
         var inputs = new INPUT[1];
         inputs[0] = new INPUT
         {
@@ -297,8 +282,6 @@ public class AntiAfkService
 
         win32Error = Marshal.GetLastWin32Error();
 
-        // Fallback path used by some tools (AutoIt family) when SendInput gets blocked.
-        // Even if this API is older, it can still work in edge cases where SendInput fails.
         try
         {
             uint flags = keyUp ? KEYEVENTF_KEYUP : 0;
@@ -314,7 +297,7 @@ public class AntiAfkService
     private static bool SendKeyVk(ushort vkCode, bool keyUp, out int win32Error)
     {
         win32Error = 0;
-        ushort scan = (ushort)MapVirtualKey(vkCode, 0); // MAPVK_VK_TO_VSC
+        ushort scan = (ushort)MapVirtualKey(vkCode, 0);
         var inputs = new INPUT[1];
         inputs[0] = new INPUT
         {
@@ -323,7 +306,7 @@ public class AntiAfkService
             {
                 ki = new KEYBDINPUT
                 {
-                    wVk   = vkCode,
+                    wVk = vkCode,
                     wScan = scan,
                     dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
                     time = 0,
@@ -349,7 +332,6 @@ public class AntiAfkService
         }
     }
 
-    // Fires one key-send cycle immediately (for testing without waiting the interval).
     public async Task<string> TestNowAsync()
     {
         var stats = await Task.Run(SendKeyToAllRobloxWindows);
@@ -375,8 +357,6 @@ public class AntiAfkService
                 if (!proc.ProcessName.Equals("RobloxPlayerBeta", StringComparison.OrdinalIgnoreCase))
                     return true;
 
-                // Accept any visible, titled window — title may be the account username
-                // if WindowRenameService has renamed it.
                 var title = new StringBuilder(256);
                 GetWindowText(hWnd, title, title.Capacity);
                 if (title.Length > 0)

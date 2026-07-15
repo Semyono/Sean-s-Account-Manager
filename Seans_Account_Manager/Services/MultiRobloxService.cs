@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Principal;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -24,6 +25,13 @@ public static class MultiRobloxService
 
     public static string? LastError { get; private set; }
     public static bool IsEnabled => _enabled;
+
+    public static bool IsRunningAsAdmin()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
 
     public static bool Enable()
     {
@@ -62,12 +70,12 @@ public static class MultiRobloxService
         }
     }
 
-    public static bool DownloadHandle64()
+    public static bool DownloadHandle64(Action<int>? onProgress = null)
     {
         lock (SyncRoot)
         {
             LastError = null;
-            if (!TryDownloadHandleTool(out var path) || string.IsNullOrWhiteSpace(path))
+            if (!TryDownloadHandleTool(onProgress, out var path) || string.IsNullOrWhiteSpace(path))
             {
                 if (string.IsNullOrWhiteSpace(LastError))
                     LastError = "Failed to download Handle64.";
@@ -76,6 +84,42 @@ public static class MultiRobloxService
 
             _handleToolPath = path;
             return true;
+        }
+    }
+
+    public static bool DeleteHandle64(Action<int>? onProgress = null)
+    {
+        lock (SyncRoot)
+        {
+            LastError = null;
+
+            if (_monitoring)
+            {
+                LastError = "Disable Multi Roblox first before deleting Handle64.";
+                return false;
+            }
+
+            var path = ResolveHandleToolPath();
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                LastError = "Handle64 was not found — nothing to delete.";
+                return false;
+            }
+
+            try
+            {
+                onProgress?.Invoke(30);
+                onProgress?.Invoke(70);
+                File.Delete(path);
+                onProgress?.Invoke(100);
+                _handleToolPath = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                return false;
+            }
         }
     }
 
@@ -261,7 +305,7 @@ public static class MultiRobloxService
         yield return Path.Combine(AppContext.BaseDirectory, FallbackHandleToolName);
     }
 
-    private static bool TryDownloadHandleTool(out string? path)
+    private static bool TryDownloadHandleTool(Action<int>? onProgress, out string? path)
     {
         path = null;
         try
@@ -270,9 +314,39 @@ public static class MultiRobloxService
             Directory.CreateDirectory(toolDir);
 
             using var client = new HttpClient();
-            var archiveBytes = client.GetByteArrayAsync(HandleDownloadUrl).GetAwaiter().GetResult();
             var archivePath = Path.Combine(toolDir, "Handle.zip");
-            File.WriteAllBytes(archivePath, archiveBytes);
+
+            using (var response = client.GetAsync(HandleDownloadUrl, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
+            {
+                response.EnsureSuccessStatusCode();
+                long totalBytes = response.Content.Headers.ContentLength ?? -1;
+
+                using var httpStream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                using var fileStream = File.Create(archivePath);
+
+                var buffer = new byte[81920];
+                long readSoFar = 0;
+                int lastReportedPct = -1;
+                int read;
+
+                while ((read = httpStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    fileStream.Write(buffer, 0, read);
+                    readSoFar += read;
+
+                    if (totalBytes > 0)
+                    {
+                        int pct = (int)(readSoFar * 90 / totalBytes);
+                        if (pct != lastReportedPct)
+                        {
+                            lastReportedPct = pct;
+                            onProgress?.Invoke(pct);
+                        }
+                    }
+                }
+            }
+
+            onProgress?.Invoke(92);
 
             using var archive = ZipFile.OpenRead(archivePath);
             var entry = archive.Entries.FirstOrDefault(e => e.FullName.Equals(HandleToolName, StringComparison.OrdinalIgnoreCase))
@@ -281,12 +355,18 @@ public static class MultiRobloxService
             if (entry == null)
                 return false;
 
+            onProgress?.Invoke(96);
+
             var destinationPath = Path.Combine(toolDir, HandleToolName);
             using (var source = entry.Open())
             using (var destination = File.Create(destinationPath))
             {
                 source.CopyTo(destination);
             }
+
+            try { File.Delete(archivePath); } catch { }
+
+            onProgress?.Invoke(100);
 
             path = destinationPath;
             return File.Exists(destinationPath);

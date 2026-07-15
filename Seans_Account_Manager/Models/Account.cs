@@ -13,6 +13,7 @@ public class Account
     public bool IsCookieValid { get; set; } = true;
     public DateTime AddedAt { get; set; } = DateTime.Now;
     public int Order { get; set; }
+    public bool IsSelected { get; set; }
 }
 
 public enum PresenceType

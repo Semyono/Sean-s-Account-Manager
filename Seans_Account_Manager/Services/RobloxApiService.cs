@@ -1,8 +1,10 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Seans_Account_Manager.Models;
 
 namespace Seans_Account_Manager.Services;
@@ -14,6 +16,15 @@ public class RobloxAuthResult
     public string Username { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
 }
+
+public class PrivateServerResult
+{
+    public bool Success { get; set; }
+    public long? PlaceId { get; set; }
+    public string? AccessCode { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
 
 public class RobloxApiService
 {
@@ -157,30 +168,38 @@ public class RobloxApiService
         }
     }
 
-    public void LaunchGame(string authTicket, long placeId, string? jobId = null, string? accessCode = null)
+    public void LaunchGame(string authTicket, long placeId, string? jobId = null, string? accessCode = null, string? launcherExePath = null)
     {
-        string joinScript;
+        long browserTrackerId = Random.Shared.NextInt64(55393295400L, 55393295500L);
+        long launchTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+        string joinScript =
+            $"+launchmode:play+gameinfo:{authTicket}+launchtime:{launchTime}" +
+            $"+placelauncherurl:https%3A%2F%2Fassetgame.roblox.com%2Fgame%2FPlaceLauncher.ashx%3Frequest%3DRequestGameJob" +
+            $"%26browserTrackerId%3D{browserTrackerId}%26placeId%3D{placeId}%26isPlayTogetherGame%3Dfalse";
+
         if (!string.IsNullOrEmpty(accessCode))
-        {
-            joinScript = $"+launchmode:play+gameinfo:{authTicket}+launchtime:{DateTimeOffset.Now.ToUnixTimeMilliseconds()}" +
-                         $"+placelauncherurl:https%3A%2F%2Fassetgame.roblox.com%2Fgame%2FPlaceLauncher.ashx%3Frequest%3DRequestPrivateGame%26placeId%3D{placeId}%26accessCode%3D{accessCode}" +
-                         "+browsertrackerid:0+robloxLocale:en_us+gameLocale:en_us+channel:";
-        }
+            joinScript += $"%26linkCode%3D{accessCode}";
         else if (!string.IsNullOrEmpty(jobId))
-        {
-            joinScript = $"+launchmode:play+gameinfo:{authTicket}+launchtime:{DateTimeOffset.Now.ToUnixTimeMilliseconds()}" +
-                         $"+placelauncherurl:https%3A%2F%2Fassetgame.roblox.com%2Fgame%2FPlaceLauncher.ashx%3Frequest%3DRequestGameJob%26placeId%3D{placeId}%26gameId%3D{jobId}" +
-                         "+browsertrackerid:0+robloxLocale:en_us+gameLocale:en_us+channel:";
-        }
-        else
-        {
-            joinScript = $"+launchmode:play+gameinfo:{authTicket}+launchtime:{DateTimeOffset.Now.ToUnixTimeMilliseconds()}" +
-                         $"+placelauncherurl:https%3A%2F%2Fassetgame.roblox.com%2Fgame%2FPlaceLauncher.ashx%3Frequest%3DRequestGame%26placeId%3D{placeId}" +
-                         "+browsertrackerid:0+robloxLocale:en_us+gameLocale:en_us+channel:";
-        }
+            joinScript += $"%26gameId%3D{jobId}";
+
+        joinScript += $"+browsertrackerid:{browserTrackerId}+robloxLocale:en_us+gameLocale:en_us+channel:";
 
         long sequence = Interlocked.Increment(ref _launchSequence);
         string uri = "roblox-player:1" + joinScript + $"+launchIdentifier:{sequence}";
+
+        if (!string.IsNullOrEmpty(launcherExePath) && File.Exists(launcherExePath))
+        {
+            var launcherPsi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = launcherExePath,
+                Arguments = $"\"{uri}\"",
+                UseShellExecute = true
+            };
+            System.Diagnostics.Process.Start(launcherPsi);
+            return;
+        }
+
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = uri,
@@ -245,6 +264,144 @@ public class RobloxApiService
         catch
         {
             return string.Empty;
+        }
+    }
+
+    public async Task<PrivateServerResult> ResolvePrivateServerAsync(string input, string cookie)
+    {
+        input = input.Trim();
+        if (string.IsNullOrEmpty(input))
+            return new PrivateServerResult { Success = false, ErrorMessage = "Empty input." };
+
+        var vipMatch = Regex.Match(input,
+            @"roblox\.com/games/(\d+)/[^?#]*\?[^#]*privateServerLinkCode=([A-Za-z0-9]+)",
+            RegexOptions.IgnoreCase);
+        if (vipMatch.Success)
+        {
+            return new PrivateServerResult
+            {
+                Success = true,
+                PlaceId = long.Parse(vipMatch.Groups[1].Value),
+                AccessCode = vipMatch.Groups[2].Value
+            };
+        }
+
+        var shareMatch = Regex.Match(input, @"roblox\.com/share[^?#]*[?&]code=([A-Za-z0-9]+)", RegexOptions.IgnoreCase);
+        if (shareMatch.Success)
+            return await ResolveShareCodeAsync(shareMatch.Groups[1].Value, cookie);
+
+        if (Regex.IsMatch(input, @"^[A-Za-z0-9_\-]+$"))
+            return new PrivateServerResult { Success = true, PlaceId = null, AccessCode = input };
+
+        return new PrivateServerResult { Success = false, ErrorMessage = "Could not recognize this as a VIP link, share link, or access code." };
+    }
+
+    private async Task<PrivateServerResult> ResolveShareCodeAsync(string code, string cookie)
+    {
+        try
+        {
+            using var client = CreateClient(cookie);
+            string csrf = await GetCsrfTokenAsync(client);
+            if (!string.IsNullOrEmpty(csrf))
+                client.DefaultRequestHeaders.Add("x-csrf-token", csrf);
+
+            var payloads = new[]
+            {
+            JsonSerializer.Serialize(new { linkId = code, linkType = "Server" }),
+            JsonSerializer.Serialize(new { code = code, type = "Server" })
+        };
+
+            string? lastError = null;
+
+            foreach (var payloadJson in payloads)
+            {
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("https://apis.roblox.com/sharelinks/v1/resolve-link", content);
+
+                if (response.StatusCode == HttpStatusCode.Forbidden &&
+                    response.Headers.TryGetValues("x-csrf-token", out var freshTokens))
+                {
+                    client.DefaultRequestHeaders.Remove("x-csrf-token");
+                    client.DefaultRequestHeaders.Add("x-csrf-token", freshTokens.First());
+
+                    var retryContent = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                    response = await client.PostAsync("https://apis.roblox.com/sharelinks/v1/resolve-link", retryContent);
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    lastError = $"HTTP {(int)response.StatusCode}";
+                    continue;
+                }
+
+                string raw = await response.Content.ReadAsStringAsync();
+                var placeIdMatch = Regex.Match(raw, @"""placeId""\s*:\s*(\d+)");
+                var codeMatch = Regex.Match(raw, @"""(?:linkCode|privateServerLinkCode|accessCode|linkcode)""\s*:\s*""([A-Za-z0-9_\-]+)""");
+
+                if (placeIdMatch.Success && codeMatch.Success)
+                {
+                    return new PrivateServerResult
+                    {
+                        Success = true,
+                        PlaceId = long.Parse(placeIdMatch.Groups[1].Value),
+                        AccessCode = codeMatch.Groups[1].Value
+                    };
+                }
+
+                lastError = "Response didn't contain the expected placeId/accessCode fields.";
+            }
+
+            return new PrivateServerResult { Success = false, ErrorMessage = $"Could not resolve share link: {lastError}" };
+        }
+        catch (Exception ex)
+        {
+            return new PrivateServerResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    public async Task<string?> GetSmallestServerJobIdAsync(long placeId)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            var url = $"https://games.roblox.com/v1/games/{placeId}/servers/Public?sortOrder=Asc&limit=100";
+            var response = await client.GetAsync(url);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var servers = doc.RootElement.GetProperty("data");
+            if (servers.GetArrayLength() == 0) return null;
+
+            string? bestId = null;
+            int bestPlaying = int.MaxValue;
+            string? fallbackId = null;
+            int fallbackPlaying = int.MaxValue;
+
+            foreach (var server in servers.EnumerateArray())
+            {
+                int playing = server.TryGetProperty("playing", out var p) ? p.GetInt32() : 0;
+                int maxPlayers = server.TryGetProperty("maxPlayers", out var m) ? m.GetInt32() : 0;
+                string? id = server.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+                if (id == null) continue;
+
+                if (playing < maxPlayers && playing < bestPlaying)
+                {
+                    bestPlaying = playing;
+                    bestId = id;
+                }
+                if (playing < fallbackPlaying)
+                {
+                    fallbackPlaying = playing;
+                    fallbackId = id;
+                }
+            }
+
+            return bestId ?? fallbackId;
+        }
+        catch
+        {
+            return null;
         }
     }
 }

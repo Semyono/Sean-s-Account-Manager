@@ -4,7 +4,6 @@ namespace Seans_Account_Manager.Services;
 
 public static class RobloxProcessService
 {
-    // Process names Roblox spawns — the game client and its crash-handler leftovers
     private static readonly string[] ProcessNames =
     {
         "RobloxPlayerBeta",
@@ -26,7 +25,7 @@ public static class RobloxProcessService
                     proc.WaitForExit(2000);
                     killed++;
                 }
-                catch { /* process may have exited between the query and the kill */ }
+                catch { }
                 finally
                 {
                     proc.Dispose();

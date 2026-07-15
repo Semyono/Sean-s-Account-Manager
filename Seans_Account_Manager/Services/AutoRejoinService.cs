@@ -26,7 +26,6 @@ public class AutoRejoinService
     private readonly Dictionary<long, AutoRejoinConfig> _configs = new();
     private readonly Dictionary<long, CancellationTokenSource> _cancellations = new();
 
-    // Fired when rejoin count changes, so UI can refresh
     public event Action<long>? StatusChanged;
 
     public AutoRejoinService(RobloxApiService api, AccountStore accountStore)
@@ -43,7 +42,7 @@ public class AutoRejoinService
 
     public void Start(long userId, long placeId, string? jobId = null)
     {
-        Stop(userId); // clear any existing loop
+        Stop(userId); 
 
         var config = new AutoRejoinConfig
         {
@@ -88,7 +87,6 @@ public class AutoRejoinService
         var account = _accountStore.Accounts.FirstOrDefault(a => a.UserId == config.UserId);
         if (account == null) return;
 
-        // Give the game a moment to start after being launched
         await Task.Delay(15000, ct).ContinueWith(_ => { });
 
         while (!ct.IsCancellationRequested && config.IsActive)
@@ -99,22 +97,18 @@ public class AutoRejoinService
 
                 if (!windowExists)
                 {
-                    // The window is gone — either the user closed it or the game crashed.
-                    // Relaunch, then wait for the new window to appear before resuming polling.
                     await RelaunchAsync(account, config);
                     config.RejoinCount++;
                     StatusChanged?.Invoke(config.UserId);
 
-                    // Give the new instance time to fully boot before we check again
                     await Task.Delay(20000, ct);
                     continue;
                 }
 
-                // Window is up, wait and check again
                 await Task.Delay(5000, ct);
             }
             catch (TaskCanceledException) { break; }
-            catch { await Task.Delay(5000); /* swallow transient errors, keep looping */ }
+            catch { await Task.Delay(5000);  }
         }
     }
 
@@ -130,7 +124,6 @@ public class AutoRejoinService
         _ = WindowRenameService.RenameNextRobloxWindowAsync(account.Username);
     }
 
-    // Look for a Roblox window whose title matches this user's rename pattern
     private bool FindWindowForUser(string username)
     {
         bool found = false;
@@ -154,7 +147,7 @@ public class AutoRejoinService
                 if (title.ToString().Equals(targetTitle, StringComparison.OrdinalIgnoreCase))
                 {
                     found = true;
-                    return false; // stop enumerating
+                    return false;
                 }
             }
             catch { }

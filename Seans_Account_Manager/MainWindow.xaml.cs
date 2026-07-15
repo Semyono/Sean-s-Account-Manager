@@ -36,7 +36,7 @@ public partial class MainWindow : Window
     private string _consoleFilter = "All";
     private UiTraceListener? _uiTraceListener;
     private bool _isBindingAfkKey;
-    private ushort _afkBoundVk = 0x57; // W
+    private ushort _afkBoundVk = 0x57;
     private string _afkBoundName = "W";
 
     private Point _dragStartPoint;
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
 
         AccountsList.ItemsSource = _accounts;
         foreach (var acc in _store.Accounts)
-            _accounts.Add(new AccountVm(acc));
+            AddAccountVm(acc);
 
         UpdateAccountCount();
 
@@ -67,6 +67,7 @@ public partial class MainWindow : Window
             _rejoinService.StopAll();
             _antiAfk.Stop();
             MultiRobloxService.Disable();
+            RobloxTweaksService.StopRamBoost();
             _openWindowsTimer?.Stop();
             if (_uiTraceListener != null)
                 Trace.Listeners.Remove(_uiTraceListener);
@@ -80,16 +81,34 @@ public partial class MainWindow : Window
         if (AfkKeyBindBox != null)
             AfkKeyBindBox.Text = _afkBoundName;
 
+        PlaceIdBox.Text = _appSettings.LastPlaceId;
+        JobIdBox.Text = _appSettings.LastJobId;
+        PrivateServerLinkBox.Text = _appSettings.LastPrivateServerLink;
+
         UpdateMultiRobloxUiState();
         ApplyGeneralSettingsToUi();
+        ApplyLauncherSettingsToUi();
+        UpdateSelectAllButtonText();
     }
 
-    // ================= NAV / TABS =================
+    private void AddAccountVm(Account account)
+    {
+        var vm = new AccountVm(account) { IsSelected = account.IsSelected };
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName != nameof(AccountVm.IsSelected)) return;
+            account.IsSelected = vm.IsSelected;
+            _store.Save();
+            UpdateSelectAllButtonText();
+        };
+        _accounts.Add(vm);
+    }
+
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton rb || rb.Tag is not string tag) return;
-        if (AccountsTab == null) return; // during InitializeComponent
+        if (AccountsTab == null) return; 
 
         AccountsTab.Visibility = tag == "Accounts" ? Visibility.Visible : Visibility.Collapsed;
         MultiRobloxTab.Visibility = tag == "MultiRoblox" ? Visibility.Visible : Visibility.Collapsed;
@@ -109,6 +128,23 @@ public partial class MainWindow : Window
         {
             StopOpenWindowsTimer();
         }
+
+        if (tag == "Settings")
+            RefreshLauncherRadios();
+    }
+
+    private void SettingsSubNav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb || rb.Tag is not string tag) return;
+        if (SettingsGeneralPanel == null) return;
+
+        SettingsGeneralPanel.Visibility = tag == "General" ? Visibility.Visible : Visibility.Collapsed;
+        SettingsLauncherPanel.Visibility = tag == "RobloxLauncher" ? Visibility.Visible : Visibility.Collapsed;
+
+        LogDebug($"Settings sub-tab changed -> {tag}", "App");
+
+        if (tag == "RobloxLauncher")
+            RefreshLauncherRadios();
     }
 
     private void LogDebug(string message, string category = "App")
@@ -185,8 +221,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // ================= ACCOUNTS =================
-
     private async void AddAccount_Click(object sender, RoutedEventArgs e)
     {
         var loginWindow = new LoginWindow { Owner = this };
@@ -221,9 +255,60 @@ public partial class MainWindow : Window
 
         var existing = _accounts.FirstOrDefault(a => a.Account.UserId == account.UserId);
         if (existing != null) _accounts.Remove(existing);
-        _accounts.Add(new AccountVm(account));
+        AddAccountVm(account);
 
         UpdateAccountCount();
+    }
+
+    private async void ImportCookie_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new CookieImportDialog { Owner = this };
+        bool? result = dlg.ShowDialog();
+        if (result != true || string.IsNullOrWhiteSpace(dlg.CookieValue))
+            return;
+
+        string cookie = dlg.CookieValue;
+        var authResult = await _api.GetAuthenticatedUserAsync(cookie);
+
+        if (!authResult.Success)
+        {
+            MessageBox.Show("Could not verify this cookie. It may be expired, invalid, or revoked.",
+                "Import Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            LogDebug("Cookie import failed: verification returned unsuccessful.", "Errors");
+            return;
+        }
+
+        var account = new Account
+        {
+            UserId = authResult.UserId,
+            Username = authResult.Username,
+            DisplayName = authResult.DisplayName,
+            EncryptedCookie = CryptoService.Encrypt(cookie),
+            IsCookieValid = true
+        };
+
+        account.AvatarUrl = await _api.GetAvatarThumbnailAsync(account.UserId);
+        account.Robux = await _api.GetRobuxAsync(cookie);
+        account.PresenceStatus = await _api.GetPresenceAsync(cookie, account.UserId);
+
+        var existing = _accounts.FirstOrDefault(a => a.Account.UserId == account.UserId);
+        if (existing != null)
+        {
+            var confirmReplace = MessageBox.Show(
+                $"An account for '{account.Username}' already exists. Replace its cookie?",
+                "Account Already Exists", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirmReplace != MessageBoxResult.Yes) return;
+
+            _accounts.Remove(existing);
+        }
+
+        _store.AddOrUpdate(account);
+        AddAccountVm(account);
+        UpdateAccountCount();
+
+        LogDebug($"Imported account via cookie: {account.Username}", "App");
+        MessageBox.Show($"Imported account: {account.Username}", "Success",
+            MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private async void RefreshAll_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync();
@@ -311,6 +396,47 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void JoinSmallestServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (!long.TryParse(PlaceIdBox.Text, out long placeId))
+        {
+            MessageBox.Show("Enter a valid Place ID.", "Missing Place ID", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var selected = _accounts.Where(a => a.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            if (_accounts.Count == 0)
+            {
+                MessageBox.Show("No saved accounts. Add an account first.", "No Accounts", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            selected.Add(_accounts[0]);
+        }
+
+        if (!ConfirmBeforeLaunch($"Join the smallest available server for {selected.Count} account(s)?"))
+            return;
+
+        string? jobId = await _api.GetSmallestServerJobIdAsync(placeId);
+        if (jobId == null)
+        {
+            MessageBox.Show("Could not find any public servers for this Place ID.", "No Servers Found",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            LogDebug($"Smallest server lookup failed for place {placeId}.", "Errors");
+            return;
+        }
+
+        LogDebug($"Smallest server found for place {placeId}: job {jobId}", "App");
+
+        for (int i = 0; i < selected.Count; i++)
+        {
+            await JoinWithAccountAsync(selected[i].Account, placeId, jobId);
+            if (i < selected.Count - 1)
+                await Task.Delay(8000);
+        }
+    }
+
     private async Task JoinWithAccountAsync(Account account, long placeId, string? jobId = null)
     {
         string cookie = CryptoService.Decrypt(account.EncryptedCookie);
@@ -327,7 +453,45 @@ public partial class MainWindow : Window
             return;
         }
 
-        _api.LaunchGame(ticket, placeId, jobId);
+        string? accessCode = null;
+        string psInput = PrivateServerLinkBox.Text.Trim();
+        if (!string.IsNullOrEmpty(psInput))
+        {
+            var resolved = await _api.ResolvePrivateServerAsync(psInput, cookie);
+            if (!resolved.Success)
+            {
+                MessageBox.Show(resolved.ErrorMessage ?? "Could not resolve the private server link.",
+                    "Private Server", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            accessCode = resolved.AccessCode;
+            if (resolved.PlaceId.HasValue)
+                placeId = resolved.PlaceId.Value;
+
+            PrivateServerStatusLabel.Text = "✓ Private server resolved.";
+            LogDebug($"Private server resolved: place={placeId}, code={accessCode}", "App");
+        }
+
+        string? launcherPath;
+        if (_appSettings.RobloxLauncher == "default")
+        {
+            launcherPath = RobloxLauncherService.ResolveDefaultRobloxExePath();
+            if (launcherPath == null)
+                LogDebug("Could not find RobloxPlayerBeta.exe directly, falling back to protocol (may be hijacked by a bootstrapper).", "Errors");
+        }
+        else
+        {
+            string? customPath = _appSettings.CustomLauncherPaths.TryGetValue(_appSettings.RobloxLauncher, out var cp) ? cp : null;
+            launcherPath = RobloxLauncherService.ResolveExePath(_appSettings.RobloxLauncher, customPath);
+            if (launcherPath == string.Empty)
+            {
+                LogDebug($"Selected launcher '{_appSettings.RobloxLauncher}' not found, falling back to default.", "Errors");
+                launcherPath = null;
+            }
+        }
+
+        _api.LaunchGame(ticket, placeId, accessCode != null ? null : jobId, accessCode, launcherPath);
         _ = WindowRenameService.RenameNextRobloxWindowAsync(account.Username);
         _ = TrackRecentGameAsync(placeId);
     }
@@ -399,6 +563,9 @@ public partial class MainWindow : Window
         _lookupCts = new CancellationTokenSource();
         var token = _lookupCts.Token;
 
+        _appSettings.LastPlaceId = PlaceIdBox.Text.Trim();
+        _settingsStore.Save(_appSettings);
+
         string text = PlaceIdBox.Text.Trim();
 
         if (string.IsNullOrEmpty(text) || !long.TryParse(text, out long placeId))
@@ -443,6 +610,18 @@ public partial class MainWindow : Window
         }
     }
 
+    private void JobIdBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        _appSettings.LastJobId = JobIdBox.Text.Trim();
+        _settingsStore.Save(_appSettings);
+    }
+
+    private void PrivateServerLinkBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        _appSettings.LastPrivateServerLink = PrivateServerLinkBox.Text.Trim();
+        _settingsStore.Save(_appSettings);
+    }
+
     private void DeleteAccount_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not long userId) return;
@@ -477,7 +656,23 @@ public partial class MainWindow : Window
         AccountCountLabel.Text = _accounts.Count == 1 ? "1 account" : $"{_accounts.Count} accounts";
     }
 
-    // ================= MULTI ROBLOX TAB =================
+    private void SelectAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        bool allCurrentlySelected = _accounts.Count > 0 && _accounts.All(a => a.IsSelected);
+        bool newState = !allCurrentlySelected;
+
+        foreach (var vm in _accounts)
+            vm.IsSelected = newState; 
+
+        UpdateSelectAllButtonText();
+    }
+
+    private void UpdateSelectAllButtonText()
+    {
+        if (SelectAllButton == null) return;
+        bool allSelected = _accounts.Count > 0 && _accounts.All(a => a.IsSelected);
+        SelectAllButton.Content = allSelected ? "Deselect All" : "Select All";
+    }
 
     private void CloseAllRoblox_Click(object sender, RoutedEventArgs e)
     {
@@ -505,8 +700,7 @@ public partial class MainWindow : Window
         if (MultiRobloxService.Enable())
         {
             LogDebug("Multi Roblox enabled.", "MultiRoblox");
-            Handle64StatusLabel.Text = "Handle64 ready.";
-            Handle64StatusLabel.Foreground = FindResource("SuccessBrush") as System.Windows.Media.Brush;
+            RefreshHandle64Status();
             return;
         }
 
@@ -528,15 +722,31 @@ public partial class MainWindow : Window
 
     private void DownloadHandle64_Click(object sender, RoutedEventArgs e)
     {
+        DownloadHandle64Button.IsEnabled = false;
+        Handle64ProgressPanel.Visibility = Visibility.Visible;
+        Handle64ProgressBar.Value = 0;
+        Handle64ProgressLabel.Text = "0%";
         Handle64StatusLabel.Text = "Downloading Handle64...";
         Handle64StatusLabel.Foreground = FindResource("TextMuted") as System.Windows.Media.Brush;
 
-        bool ok = MultiRobloxService.DownloadHandle64();
+        void OnProgress(int pct)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Handle64ProgressBar.Value = pct;
+                Handle64ProgressLabel.Text = $"{pct}%";
+            });
+        }
+
+        bool ok = MultiRobloxService.DownloadHandle64(OnProgress);
+
+        DownloadHandle64Button.IsEnabled = true;
+        Handle64ProgressPanel.Visibility = Visibility.Collapsed;
+
         if (ok)
         {
-            Handle64StatusLabel.Text = "Handle64 downloaded.";
-            Handle64StatusLabel.Foreground = FindResource("SuccessBrush") as System.Windows.Media.Brush;
             LogDebug("Handle64 downloaded successfully.", "MultiRoblox");
+            UpdateMultiRobloxUiState();
             return;
         }
 
@@ -546,6 +756,53 @@ public partial class MainWindow : Window
         Handle64StatusLabel.Text = err;
         Handle64StatusLabel.Foreground = FindResource("DangerBrush") as System.Windows.Media.Brush;
         LogDebug($"Handle64 download failed: {err}", "Errors");
+    }
+
+    private void DeleteHandle64_Click(object sender, RoutedEventArgs e)
+    {
+        if (MultiRobloxService.IsEnabled)
+        {
+            MessageBox.Show("Turn off Multi Roblox first, then delete Handle64.", "Multi Roblox Active",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            "This permanently deletes handle64.exe from your computer.\n\nMulti Roblox won't work again until you re-download it. Continue?",
+            "Delete Handle64", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        DeleteHandle64Button.IsEnabled = false;
+        Handle64ProgressPanel.Visibility = Visibility.Visible;
+        Handle64ProgressBar.Value = 0;
+        Handle64ProgressLabel.Text = "0%";
+
+        void OnProgress(int pct)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Handle64ProgressBar.Value = pct;
+                Handle64ProgressLabel.Text = $"{pct}%";
+            });
+        }
+
+        bool ok = MultiRobloxService.DeleteHandle64(OnProgress);
+
+        DeleteHandle64Button.IsEnabled = true;
+        Handle64ProgressPanel.Visibility = Visibility.Collapsed;
+
+        if (ok)
+        {
+            LogDebug("Handle64 deleted.", "MultiRoblox");
+            UpdateMultiRobloxUiState();
+            return;
+        }
+
+        var err = string.IsNullOrWhiteSpace(MultiRobloxService.LastError)
+            ? "Failed to delete Handle64."
+            : MultiRobloxService.LastError;
+        MessageBox.Show(err, "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        LogDebug($"Handle64 delete failed: {err}", "Errors");
     }
 
     private void UpdateMultiRobloxUiState()
@@ -558,19 +815,34 @@ public partial class MainWindow : Window
         if (DownloadHandle64Button != null)
             DownloadHandle64Button.Visibility = hasHandle ? Visibility.Collapsed : Visibility.Visible;
 
-        if (Handle64StatusLabel == null)
-            return;
+        if (DeleteHandle64Button != null)
+            DeleteHandle64Button.Visibility = hasHandle ? Visibility.Visible : Visibility.Collapsed;
 
-        if (hasHandle)
-        {
-            Handle64StatusLabel.Text = "Handle64 ready.";
-            Handle64StatusLabel.Foreground = FindResource("SuccessBrush") as System.Windows.Media.Brush;
-        }
-        else
+        RefreshHandle64Status();
+    }
+
+    private void RefreshHandle64Status()
+    {
+        if (Handle64StatusLabel == null) return;
+
+        bool hasHandle = MultiRobloxService.IsHandle64Available();
+
+        if (!hasHandle)
         {
             Handle64StatusLabel.Text = "[Handle64 not found]";
             Handle64StatusLabel.Foreground = FindResource("DangerBrush") as System.Windows.Media.Brush;
+            return;
         }
+
+        if (!MultiRobloxService.IsRunningAsAdmin())
+        {
+            Handle64StatusLabel.Text = "⚠ Not running as Administrator — Handle64 close will fail silently.";
+            Handle64StatusLabel.Foreground = FindResource("WarningBrush") as System.Windows.Media.Brush;
+            return;
+        }
+
+        Handle64StatusLabel.Text = "Handle64 ready.";
+        Handle64StatusLabel.Foreground = FindResource("SuccessBrush") as System.Windows.Media.Brush;
     }
 
     private void RefreshOpenWindows_Click(object sender, RoutedEventArgs e) => RefreshOpenWindowsLabel();
@@ -594,8 +866,6 @@ public partial class MainWindow : Window
     private void StopOpenWindowsTimer() => _openWindowsTimer?.Stop();
 
     private void OpenWindowsTimer_Tick(object? sender, EventArgs e) => RefreshOpenWindowsLabel();
-
-    // ================= AUTO-REJOIN =================
 
     private void OnRejoinStatusChanged(long userId)
     {
@@ -635,13 +905,11 @@ public partial class MainWindow : Window
         _rejoinService.Start(userId, placeId, jobId);
     }
 
-    // ================= ANTI-AFK (KEEP-AWAKE) =================
-
     private void ToggleAntiAfk_Click(object sender, RoutedEventArgs e)
     {
         if (_antiAfk.IsRunning)
         {
-            _antiAfk.Ticked       -= OnAntiAfkTicked;
+            _antiAfk.Ticked -= OnAntiAfkTicked;
             _antiAfk.CountdownTick -= OnCountdownTick;
             _antiAfk.Stop();
             AntiAfkToggleBtn.Content = "Start Anti-AFK";
@@ -667,12 +935,12 @@ public partial class MainWindow : Window
         string keyName = _afkBoundName;
 
         _antiAfk.IntervalMinutes = intervalMin;
-        _antiAfk.KeyName  = keyName;
+        _antiAfk.KeyName = keyName;
         _antiAfk.VirtualKeyCode = _afkBoundVk;
         _antiAfk.PressCount = pressCount;
         _afkCount = 0;
         _antiAfk.Start();
-        _antiAfk.Ticked       += OnAntiAfkTicked;
+        _antiAfk.Ticked += OnAntiAfkTicked;
         _antiAfk.CountdownTick += OnCountdownTick;
 
         AntiAfkToggleBtn.Content = "Stop Anti-AFK";
@@ -732,8 +1000,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // ================= SETTINGS =================
-
     private void OpenDataFolder_Click(object sender, RoutedEventArgs e)
     {
         string path = Path.Combine(
@@ -772,7 +1038,255 @@ public partial class MainWindow : Window
         return result == MessageBoxResult.Yes;
     }
 
-    // ================= TITLE BAR =================
+    private void BuildLauncherRadios()
+    {
+        LauncherRadioPanel.Children.Clear();
+        foreach (var (key, info) in RobloxLauncherService.Launchers)
+        {
+            string? customPath = _appSettings.CustomLauncherPaths.TryGetValue(key, out var p) ? p : null;
+            bool installed = RobloxLauncherService.IsInstalled(key, customPath);
+            var radio = new RadioButton
+            {
+                GroupName = "LauncherChoice",
+                Tag = key,
+                Foreground = installed
+                    ? (System.Windows.Media.Brush)FindResource("TextPrimary")
+                    : (System.Windows.Media.Brush)FindResource("TextMuted"),
+                FontSize = 12,
+                Margin = new Thickness(0, 0, 0, 4),
+                IsChecked = _appSettings.RobloxLauncher == key,
+                IsEnabled = installed,
+                Content = installed ? info.DisplayName : $"{info.DisplayName}  (not installed)"
+            };
+            radio.Checked += LauncherRadio_Checked;
+            radio.Click += LauncherRadio_Click;
+            LauncherRadioPanel.Children.Add(radio);
+        }
+
+        LoadCustomPathForSelectedLauncher();
+    }
+
+    private void RefreshLauncherRadios()
+    {
+        if (LauncherRadioPanel.Children.Count == 0)
+        {
+            BuildLauncherRadios();
+            return;
+        }
+
+        foreach (var child in LauncherRadioPanel.Children)
+            if (child is RadioButton rb && rb.Tag is string key)
+            {
+                string? customPath = _appSettings.CustomLauncherPaths.TryGetValue(key, out var p) ? p : null;
+                bool installed = RobloxLauncherService.IsInstalled(key, customPath);
+                rb.IsEnabled = installed;
+                rb.Foreground = installed
+                    ? (System.Windows.Media.Brush)FindResource("TextPrimary")
+                    : (System.Windows.Media.Brush)FindResource("TextMuted");
+                rb.Content = installed
+                    ? RobloxLauncherService.Launchers[key].DisplayName
+                    : $"{RobloxLauncherService.Launchers[key].DisplayName}  (not installed)";
+            }
+    }
+
+    private void LauncherRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb || rb.Tag is not string key) return;
+        SetActiveLauncher(key);
+    }
+
+    private void LauncherRadio_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb || rb.Tag is not string key) return;
+        SetActiveLauncher(key);
+    }
+
+    private void SetActiveLauncher(string key)
+    {
+        if (_appSettings.RobloxLauncher == key)
+        {
+            LoadCustomPathForSelectedLauncher();
+            return;
+        }
+
+        _appSettings.RobloxLauncher = key;
+        _settingsStore.Save(_appSettings);
+        LogDebug($"Roblox launcher set to: {key}", "App");
+
+        LoadCustomPathForSelectedLauncher();
+    }
+
+    private void LoadCustomPathForSelectedLauncher()
+    {
+        string key = _appSettings.RobloxLauncher;
+        bool isDefault = key == "default";
+
+        CustomLauncherPathBox.IsEnabled = !isDefault;
+        CustomLauncherPathBox.Text = isDefault
+            ? ""
+            : (_appSettings.CustomLauncherPaths.TryGetValue(key, out var p) ? p : "");
+
+        CustomPathStatusLabel.Text = isDefault
+            ? "Default launcher doesn't use a custom path."
+            : "";
+    }
+
+    private void CustomLauncherPathBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        SaveCustomLauncherPath();
+    }
+
+    private void BrowseCustomLauncherPath_Click(object sender, RoutedEventArgs e)
+    {
+        string key = _appSettings.RobloxLauncher;
+        if (key == "default") return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"Select {RobloxLauncherService.Launchers[key].DisplayName}.exe",
+            Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
+        };
+
+        if (dlg.ShowDialog(this) == true)
+        {
+            CustomLauncherPathBox.Text = dlg.FileName;
+            SaveCustomLauncherPath();
+        }
+    }
+
+    private void SaveCustomLauncherPath()
+    {
+        string key = _appSettings.RobloxLauncher;
+        if (key == "default") return;
+
+        string path = CustomLauncherPathBox.Text.Trim();
+
+        if (string.IsNullOrEmpty(path))
+        {
+            _appSettings.CustomLauncherPaths.Remove(key);
+            CustomPathStatusLabel.Text = "";
+        }
+        else if (!File.Exists(path))
+        {
+            CustomPathStatusLabel.Text = "⚠ File not found at this path.";
+            CustomPathStatusLabel.Foreground = FindResource("WarningBrush") as System.Windows.Media.Brush;
+        }
+        else
+        {
+            _appSettings.CustomLauncherPaths[key] = path;
+            CustomPathStatusLabel.Text = "✓ Custom path saved.";
+            CustomPathStatusLabel.Foreground = FindResource("SuccessBrush") as System.Windows.Media.Brush;
+            LogDebug($"Custom path set for {key}: {path}", "App");
+        }
+
+        _settingsStore.Save(_appSettings);
+        RefreshLauncherRadios();
+    }
+
+    private void ForceFramerateCapCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        bool enabled = ForceFramerateCapCheckBox.IsChecked == true;
+        _appSettings.ForceFramerateCap = enabled;
+        _settingsStore.Save(_appSettings);
+
+        if (enabled)
+        {
+            if (!int.TryParse(FramerateCapValueBox.Text, out int fps) || fps < 1)
+            {
+                FramerateStatusLabel.Text = "Enter a valid FPS value first.";
+                ForceFramerateCapCheckBox.IsChecked = false;
+                _appSettings.ForceFramerateCap = false;
+                _settingsStore.Save(_appSettings);
+                return;
+            }
+
+            bool ok = RobloxTweaksService.SetFramerateCap(fps);
+            FramerateStatusLabel.Text = ok
+                ? $"Framerate capped at {fps} and locked."
+                : $"Failed: {RobloxTweaksService.LastError}";
+            LogDebug(ok ? $"Framerate cap set to {fps}." : $"Framerate cap failed: {RobloxTweaksService.LastError}",
+                ok ? "App" : "Errors");
+        }
+        else
+        {
+            RobloxTweaksService.UnlockFramerateCap();
+            FramerateStatusLabel.Text = "Framerate cap unlocked (Roblox controls it again).";
+            LogDebug("Framerate cap unlocked.", "App");
+        }
+    }
+
+    private void FramerateCapValueBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(FramerateCapValueBox.Text, out int fps) || fps < 1) return;
+        _appSettings.FramerateCapValue = fps;
+        _settingsStore.Save(_appSettings);
+
+        if (_appSettings.ForceFramerateCap)
+        {
+            bool ok = RobloxTweaksService.SetFramerateCap(fps);
+            FramerateStatusLabel.Text = ok
+                ? $"Framerate capped at {fps} and locked."
+                : $"Failed: {RobloxTweaksService.LastError}";
+        }
+    }
+
+    private void BoostRamCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        bool enabled = BoostRamCheckBox.IsChecked == true;
+        _appSettings.BoostRobloxRam = enabled;
+        _settingsStore.Save(_appSettings);
+
+        if (enabled)
+        {
+            if (!int.TryParse(RamLimitValueBox.Text, out int limit) || limit < 100)
+            {
+                RamBoostStatusLabel.Text = "Enter a valid limit (min 100 MB) first.";
+                BoostRamCheckBox.IsChecked = false;
+                _appSettings.BoostRobloxRam = false;
+                _settingsStore.Save(_appSettings);
+                return;
+            }
+
+            RobloxTweaksService.StartRamBoost(limit, msg => LogDebug(msg, "App"));
+            RamBoostStatusLabel.Text = $"Running · trims processes over {limit} MB every 15s.";
+            LogDebug($"RAM boost started at {limit} MB limit.", "App");
+        }
+        else
+        {
+            RobloxTweaksService.StopRamBoost();
+            RamBoostStatusLabel.Text = "Stopped.";
+            LogDebug("RAM boost stopped.", "App");
+        }
+    }
+
+    private void RamLimitValueBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(RamLimitValueBox.Text, out int limit) || limit < 100) return;
+        _appSettings.RamLimitMb = limit;
+        _settingsStore.Save(_appSettings);
+
+        if (_appSettings.BoostRobloxRam)
+        {
+            RobloxTweaksService.StopRamBoost();
+            RobloxTweaksService.StartRamBoost(limit, msg => LogDebug(msg, "App"));
+            RamBoostStatusLabel.Text = $"Running · trims processes over {limit} MB every 15s.";
+        }
+    }
+
+    private void ApplyLauncherSettingsToUi()
+    {
+        FramerateCapValueBox.Text = _appSettings.FramerateCapValue.ToString();
+        ForceFramerateCapCheckBox.IsChecked = _appSettings.ForceFramerateCap;
+
+        RamLimitValueBox.Text = _appSettings.RamLimitMb.ToString();
+        BoostRamCheckBox.IsChecked = _appSettings.BoostRobloxRam;
+
+        if (_appSettings.ForceFramerateCap)
+            RobloxTweaksService.SetFramerateCap(_appSettings.FramerateCapValue);
+
+        if (_appSettings.BoostRobloxRam)
+            RobloxTweaksService.StartRamBoost(_appSettings.RamLimitMb, msg => LogDebug(msg, "App"));
+    }
 
     private void MinimizeBtn_Click(object sender, RoutedEventArgs e)
         => WindowState = WindowState.Minimized;
@@ -780,7 +1294,26 @@ public partial class MainWindow : Window
     private void CloseBtn_Click(object sender, RoutedEventArgs e)
         => Close();
 
-    // ================= DRAG & DROP =================
+    private void DiscordLink_Click(object sender, MouseButtonEventArgs e)
+    {
+        OpenUrl("https://discord.gg/XKy78UDZHG");
+        LogDebug("Opened Discord link.", "App");
+    }
+
+    private void RobloxProfileLink_Click(object sender, MouseButtonEventArgs e)
+    {
+        OpenUrl("https://www.roblox.com/users/3971324927/profile");
+        LogDebug("Opened Roblox profile link.", "App");
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch { }
+    }
 
     private void AccountCard_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -900,7 +1433,6 @@ public partial class MainWindow : Window
     private sealed record ConsoleLogEntry(string Text, string Category, bool IsError);
 }
 
-// Wraps Account with UI-only state (selection, change notifications)
 public class AccountVm : INotifyPropertyChanged
 {
     public Account Account { get; }
