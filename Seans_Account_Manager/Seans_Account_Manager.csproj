@@ -19,4 +19,10 @@
     <Resource Include="Assets\*.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="NativeDlls\WebView2Loader.dll">
+      <LogicalName>Seans_Account_Manager.NativeDlls.WebView2Loader.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>
