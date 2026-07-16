@@ -55,4 +55,4 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 Data
 
-Everything is stored locally in %AppData%\SeansAccountManager. Cookies are encrypted and tied to your Windows account, so they can't be read on another machine or by another user. There's no analytics or telemetry, and nothing is sent anywhere except Roblox's own API.
+Everything is stored locally in %AppData%\SeansAccountManager. Cookies are encrypted and tied to your Windows account.
